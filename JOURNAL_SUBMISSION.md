@@ -11,7 +11,8 @@ This is a general preparation guide, not a substitute for the target journal's a
 - [ ] Identify the exact code revision used for the reported results. Archive that revision in a suitable repository or research archive and obtain a persistent identifier (such as a DOI) if the journal requests one.
 - [ ] Archive the input data or provide a stable, permitted data location. If data cannot be shared, explain the restriction and how qualified researchers may request access.
 - [ ] Record the operating system, Python version, dependency versions, hardware, and any instrument or sensor details needed to reproduce the work.
-- [ ] Run the application from a clean environment with the documented inputs and record any manual setup or preprocessing steps.
+- [ ] Run the sensor-free ROM demonstration described in `README.md` from a clean environment with all required ANSYS exports, DO data, and STL meshes. Record the operating system, Python and dependency versions, and any manual setup or preprocessing steps.
+- [ ] Distinguish interactive test-mode output from experimental validation. Test-mode predictions are not sensor measurements; enter measured DO data before reporting validation metrics.
 - [ ] Verify all reported results against the archived code and data. Do not report example or test-mode output as experimental validation.
 
 ## Suggested manuscript content

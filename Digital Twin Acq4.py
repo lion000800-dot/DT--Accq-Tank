@@ -1,8 +1,10 @@
 import sys
+import time
 import pandas as pd
 import numpy as np
 import pyvista as pv
 import serial
+from serial.tools import list_ports
 import matplotlib.pyplot as plt 
 from PyQt5 import QtWidgets, QtCore, QtGui
 from pyvistaqt import QtInteractor
@@ -308,6 +310,7 @@ class ROMApp(QtWidgets.QMainWindow):
         self.vector_submode = "Top"
         self.pt = np.array([0.0, 0.0, 0.0])
         self.ser = None
+        self.connected_port = None
         self.current_inputs = {'temp': 25.0, 'flow': 0.0, 'ph': 7.0}
         
         self.is_test_mode = False 
@@ -329,6 +332,7 @@ class ROMApp(QtWidgets.QMainWindow):
         self.acq_timer.start(500) 
 
     def setup_engine(self):
+        start_time = time.perf_counter()
         T_axis = np.linspace(24, 30, 7); Q_axis = np.linspace(0, 5, 6)
         self.params_train = np.array(list(product(T_axis, Q_axis))) 
         df_geo = load_ansys_csv('exportgeometry.csv', ['Node Number', 'X [ m ]', 'Y [ m ]', 'Z [ m ]'])
@@ -350,6 +354,9 @@ class ROMApp(QtWidgets.QMainWindow):
             mesh = pv.read(f"{name}.stl")
             _, idx = self.rom_tree.query(mesh.points); self.boundaries[name] = {'mesh': mesh, 'indices': idx}
         self.clim_temp = [S_T.min(), S_T.max()]; self.clim_vel = [0, np.sqrt(S_U**2).max()]; self.clim_Do = [3, 10]
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
+        print(f"ROM setup time: {elapsed_time:.4f} seconds")
 
     def setup_ui(self):
         cw = QtWidgets.QWidget()
@@ -747,15 +754,37 @@ class ROMApp(QtWidgets.QMainWindow):
             self.card_ph.setText(f"{self.current_inputs['ph']:.2f}")
             self.update_plots()
 
+    def detect_serial_port(self):
+        ports = list(list_ports.comports())
+        if not ports:
+            return None
+
+        port_names = [p.device for p in ports]
+        candidates = []
+        for p in ports:
+            desc = (p.description or "").lower()
+            if any(key in desc for key in ["arduino", "usb serial", "cp210", "ch340", "ftdi", "wchusbserial"]):
+                candidates.append(p.device)
+
+        return candidates[0] if candidates else port_names[0]
+
     def connect_serial(self):
         if self.is_test_mode: self.toggle_test_mode()
         if self.ser is None:
             try:
-                self.ser = serial.Serial('COM3', 9600, timeout=0.1)
-                self.btn_connect_com.setText("CONNECTED (COM3)")
+                port_name = self.detect_serial_port()
+                if port_name is None:
+                    QtWidgets.QMessageBox.warning(self, "Connection Error", "No serial device detected.")
+                    self.update_connection_ui_state(False)
+                    return
+
+                self.ser = serial.Serial(port_name, 9600, timeout=0.1)
+                self.connected_port = port_name
+                self.btn_connect_com.setText(f"CONNECTED ({port_name})")
                 self.update_connection_ui_state(True)
-            except: 
-                QtWidgets.QMessageBox.warning(self, "Connection Error", "Arduino not detected on COM3")
+            except Exception as exc:
+                self.connected_port = None
+                QtWidgets.QMessageBox.warning(self, "Connection Error", f"Arduino not detected.\n{exc}")
                 self.update_connection_ui_state(False)
 
     def disconnect_serial(self):
@@ -820,9 +849,12 @@ class ROMApp(QtWidgets.QMainWindow):
         t_in = np.clip(self.current_inputs['temp'], 20, 35)
         q_in = np.clip(self.current_inputs['flow'], 0, 8)
         
+        rom_start_time = time.perf_counter()
         a_T = np.array([f(t_in, q_in) for f in self.rbf_T]); a_U = np.array([f(t_in, q_in) for f in self.rbf_U])
         T_recon = self.Phi_T @ a_T; U_recon = (self.Phi_U @ a_U).reshape(3, self.N).T
         Vmag = np.linalg.norm(U_recon, axis=1)
+        rom_elapsed_time = time.perf_counter() - rom_start_time
+        print(f"ROM calculation time: {rom_elapsed_time:.6f} seconds")
 
         # --- ตรวจสอบการเปลี่ยนโหมด เพื่อล้างหน้าจอเฉพาะตอนเปลี่ยนมุมมอง ---
         mode_changed = not hasattr(self, '_last_mode') or self._last_mode != self.display_mode
@@ -930,4 +962,3 @@ if __name__ == "__main__":
     window = ROMApp()
     window.showMaximized()
     sys.exit(app.exec_())
-    
