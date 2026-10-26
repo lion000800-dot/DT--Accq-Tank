@@ -1,0 +1,10 @@
+numpy
+pandas
+scipy
+scikit-learn
+matplotlib
+pyvista
+pyvistaqt
+PyQt5
+pyserial
+openpyxl
